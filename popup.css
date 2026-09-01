@@ -28,6 +28,9 @@ header {
   backdrop-filter: blur(12px);
 }
 
+.title-block { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.popup-logo { width: 34px; height: 34px; flex: 0 0 auto; }
+
 .filters {
   display: flex;
   gap: 7px;
@@ -60,6 +63,49 @@ h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
 
 button { font: inherit; }
 
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+.power-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #53665d;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.power-control input { position: absolute; opacity: 0; pointer-events: none; }
+.power-label { letter-spacing: .04em; }
+
+.power-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: #cbd4d0;
+  box-shadow: inset 0 0 0 1px rgba(19, 47, 36, .08);
+  transition: background .18s ease;
+}
+
+.power-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(19, 47, 36, .22);
+  transition: transform .18s ease;
+}
+
+.power-control input:checked + .power-track { background: #ff5a36; }
+.power-control input:checked + .power-track .power-thumb { transform: translateX(18px); }
+.power-control input:focus-visible + .power-track { outline: 2px solid #ff8c73; outline-offset: 2px; }
+.power-control input:disabled + .power-track { opacity: .55; cursor: wait; }
+
 .icon-button {
   width: 38px;
   height: 38px;
@@ -72,7 +118,7 @@ button { font: inherit; }
 }
 
 .icon-button:hover { background: #e8f5ee; }
-.icon-button:disabled { opacity: .55; cursor: wait; }
+.icon-button:disabled { opacity: .55; cursor: not-allowed; }
 
 main { overflow-y: auto; max-height: 455px; padding: 12px; }
 .hidden { display: none !important; }
@@ -91,6 +137,18 @@ main { overflow-y: auto; max-height: 455px; padding: 12px; }
 .state strong { color: #2a3b33; font-size: 15px; }
 .state span { max-width: 290px; font-size: 12px; line-height: 1.6; }
 .empty-icon { color: #a9b8b0; font-size: 28px; }
+.paused-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  color: #fff;
+  background: #aeb7b3;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
 .media-list { display: grid; gap: 9px; }
 
 .media-card {

@@ -97,13 +97,36 @@ assert.equal(item.audioStreams[0].codecs, "fLaC");
 assert.equal(item.duration, 120);
 assert.ok(item.size > 0);
 
+const mainWorldMessageListener = listeners.get("message");
+window.__playinfo__.data.dash.video[0].baseUrl = "https://video.example.com/1080-new.m4s?token=2";
+mainWorldMessageListener({ source: window, data: { type: "VIDEO_DOWNLOADER_BILIBILI_STATE", enabled: false } });
+mainWorldMessageListener({ source: window, data: { type: "VIDEO_DOWNLOADER_REQUEST_BILIBILI_DASH" } });
+assert.equal(messages.length, 1, "disabled Bilibili bridge should not emit play data");
+mainWorldMessageListener({ source: window, data: { type: "VIDEO_DOWNLOADER_BILIBILI_STATE", enabled: true } });
+assert.equal(messages.length, 2, "re-enabled Bilibili bridge should immediately rescan play data");
+
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 assert.ok(Number(manifest.minimum_chrome_version) >= 102);
 assert.ok(manifest.permissions.includes("declarativeNetRequestWithHostAccess"));
 assert.ok(manifest.content_scripts.some((entry) => entry.world === "MAIN" && entry.js.includes("bilibili-main.js")));
+assert.equal(manifest.action.default_icon[16], "icons/icon16.png");
+for (const size of [16, 32, 48, 128]) {
+  for (const prefix of ["icon", "icon-off"]) {
+    const png = fs.readFileSync(path.join(root, "icons", `${prefix}${size}.png`));
+    assert.equal(png.toString("hex", 0, 8), "89504e470d0a1a0a");
+    assert.equal(png.readUInt32BE(16), size);
+    assert.equal(png.readUInt32BE(20), size);
+  }
+}
+const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
+assert.match(popupHtml, /id="extensionEnabled"/);
+assert.match(popupHtml, /id="disabled"/);
 
 let backgroundMessageListener;
 const stored = new Map();
+const localSettings = new Map([["extensionEnabled", true]]);
+const tabMessages = [];
+let currentIconPath;
 const chrome = {
   runtime: {
     id: "test-extension-id",
@@ -117,24 +140,36 @@ const chrome = {
   tabs: {
     onRemoved: { addListener() {} },
     onUpdated: { addListener() {} },
-    create: async () => ({ id: 2 })
+    create: async () => ({ id: 2 }),
+    query: async () => [{ id: 1 }],
+    sendMessage: async (tabId, message) => { tabMessages.push({ tabId, message }); }
   },
   storage: {
     session: {
       async set(values) { Object.entries(values).forEach(([key, value]) => stored.set(key, value)); },
-      async get(key) { return { [key]: stored.get(key) }; },
-      async remove(key) { stored.delete(key); }
+      async get(key) { return key === null ? Object.fromEntries(stored) : { [key]: stored.get(key) }; },
+      async remove(keys) { (Array.isArray(keys) ? keys : [keys]).forEach((key) => stored.delete(key)); }
+    },
+    local: {
+      async get(key) { return { [key]: localSettings.get(key) }; },
+      async set(values) { Object.entries(values).forEach(([key, value]) => localSettings.set(key, value)); }
     }
   },
   action: {
-    setBadgeBackgroundColor() {},
-    setBadgeText() {}
+    async setBadgeBackgroundColor() {},
+    async setBadgeText() {},
+    async setIcon({ path: iconPath }) { currentIconPath = iconPath; },
+    async setTitle() {}
   },
   downloads: { download: async () => 1 }
 };
 const backgroundSource = fs.readFileSync(path.join(root, "background.js"), "utf8");
 vm.runInNewContext(backgroundSource, { chrome, crypto: require("node:crypto").webcrypto, URL, Map, console });
 assert.equal(typeof backgroundMessageListener, "function");
+
+(async () => {
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(currentIconPath[16], "icons/icon16.png");
 
 let mergedResponse;
 backgroundMessageListener({
@@ -148,6 +183,20 @@ assert.equal(mergedResponse.items.length, 1, "Bilibili DASH should replace the t
 assert.equal(mergedResponse.items[0].kind, "bilibili-dash");
 assert.equal(mergedResponse.items[0].selectedVideo.height, 1080);
 assert.equal(mergedResponse.items[0].selectedAudio.codecs, "fLaC");
+
+function sendBackgroundMessage(message, sender = {}) {
+  return new Promise((resolve) => backgroundMessageListener(message, sender, resolve));
+}
+const disabledState = await sendBackgroundMessage({ type: "SET_EXTENSION_STATE", enabled: false });
+assert.equal(disabledState.enabled, false);
+assert.equal(localSettings.get("extensionEnabled"), false);
+assert.equal(currentIconPath[16], "icons/icon-off16.png");
+assert.ok(tabMessages.some(({ message }) => message.type === "SET_EXTENSION_ENABLED" && message.enabled === false));
+const ignoredWhileDisabled = await sendBackgroundMessage({ type: "PAGE_MEDIA", items: [item] }, { tab: { id: 1 } });
+assert.equal(ignoredWhileDisabled.items.length, 0);
+const enabledState = await sendBackgroundMessage({ type: "SET_EXTENSION_STATE", enabled: true });
+assert.equal(enabledState.enabled, true);
+assert.equal(currentIconPath[16], "icons/icon16.png");
 
 let observerDisconnected = false;
 class MockMutationObserver {
@@ -190,4 +239,8 @@ for (const filename of ["background.js", "content.js", "popup.js", "hls-download
   assert.doesNotThrow(() => new Function(script), `${filename} should parse`);
 }
 
-console.log("Bilibili DASH extraction and extension scripts: OK");
+console.log("Bilibili DASH, icon assets, and global work-state tests: OK");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

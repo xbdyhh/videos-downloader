@@ -1,6 +1,7 @@
 (() => {
   const RESPONSE_TYPE = "VIDEO_DOWNLOADER_BILIBILI_DASH";
   const REQUEST_TYPE = "VIDEO_DOWNLOADER_REQUEST_BILIBILI_DASH";
+  const STATE_TYPE = "VIDEO_DOWNLOADER_BILIBILI_STATE";
   const PLAY_URL_PATTERN = /(?:api\.)?bilibili\.com\/(?:x\/player\/(?:wbi\/)?playurl|pgc\/player\/web\/playurl)/i;
   const QUALITY_NAMES = {
     6: "240P",
@@ -17,6 +18,7 @@
     127: "8K"
   };
   let lastSignature = "";
+  let captureEnabled = true;
 
   function asArray(value) {
     if (!value) return [];
@@ -93,6 +95,7 @@
   }
 
   function emitPlayInfo(playInfo, source = "page") {
+    if (!captureEnabled) return;
     const container = findDashContainer(playInfo);
     if (!container) return;
     const dash = container.dash;
@@ -170,7 +173,12 @@
   }
 
   window.addEventListener("message", (event) => {
-    if (event.source === window && event.data?.type === REQUEST_TYPE) {
+    if (event.source !== window) return;
+    if (event.data?.type === STATE_TYPE) {
+      captureEnabled = event.data.enabled !== false;
+      lastSignature = "";
+      if (captureEnabled) scanKnownPlayInfo();
+    } else if (event.data?.type === REQUEST_TYPE && captureEnabled) {
       lastSignature = "";
       scanKnownPlayInfo();
     }

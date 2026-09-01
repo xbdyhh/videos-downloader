@@ -1,9 +1,11 @@
 const elements = {
   loading: document.querySelector("#loading"),
+  disabled: document.querySelector("#disabled"),
   empty: document.querySelector("#empty"),
   mediaList: document.querySelector("#mediaList"),
   footer: document.querySelector("#footer"),
   refresh: document.querySelector("#refreshButton"),
+  powerToggle: document.querySelector("#extensionEnabled"),
   selectAll: document.querySelector("#selectAll"),
   downloadSelected: document.querySelector("#downloadSelected"),
   toast: document.querySelector("#toast")
@@ -13,6 +15,7 @@ let currentTabId;
 let items = [];
 let toastTimer;
 let activeFilter = "all";
+let extensionEnabled = true;
 
 function isDownloadable(item) {
   if (item.kind === "bilibili-dash") return !item.drm && Boolean(item.videoStreams?.length);
@@ -58,6 +61,7 @@ function showToast(message) {
 
 function setState(state) {
   elements.loading.classList.toggle("hidden", state !== "loading");
+  elements.disabled.classList.toggle("hidden", state !== "disabled");
   elements.empty.classList.toggle("hidden", state !== "empty");
   elements.mediaList.classList.toggle("hidden", state !== "results");
   elements.footer.classList.toggle("hidden", state !== "results");
@@ -332,6 +336,14 @@ async function scan() {
   elements.refresh.disabled = true;
   setState("loading");
   try {
+    const extensionState = await chrome.runtime.sendMessage({ type: "GET_EXTENSION_STATE" });
+    extensionEnabled = extensionState?.enabled !== false;
+    elements.powerToggle.checked = extensionEnabled;
+    if (!extensionEnabled) {
+      items = [];
+      setState("disabled");
+      return;
+    }
     const tab = await getActiveTab();
     if (!/^https?:/i.test(tab.url || "")) {
       throw new Error("Chrome 内部页面和扩展商店页面不允许扫描");
@@ -343,6 +355,13 @@ async function scan() {
     }
     await new Promise((resolve) => setTimeout(resolve, 180));
     const response = await chrome.runtime.sendMessage({ type: "GET_MEDIA", tabId: currentTabId });
+    if (response?.enabled === false) {
+      extensionEnabled = false;
+      elements.powerToggle.checked = false;
+      items = [];
+      setState("disabled");
+      return;
+    }
     items = response?.items || [];
     await enrichHlsItems();
     render();
@@ -351,7 +370,8 @@ async function scan() {
     render();
     showToast(error.message);
   } finally {
-    elements.refresh.disabled = false;
+    elements.refresh.disabled = !extensionEnabled;
+    elements.powerToggle.disabled = false;
   }
 }
 
@@ -384,6 +404,31 @@ async function downloadItem(item, mode = "video", audioFormat = "auto", videoFor
 }
 
 elements.refresh.addEventListener("click", scan);
+elements.powerToggle.addEventListener("change", async () => {
+  const requestedState = elements.powerToggle.checked;
+  elements.powerToggle.disabled = true;
+  elements.refresh.disabled = true;
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "SET_EXTENSION_STATE", enabled: requestedState });
+    if (!response?.ok) throw new Error(response?.error || "无法更新工作状态");
+    extensionEnabled = response.enabled;
+    elements.powerToggle.checked = extensionEnabled;
+    if (extensionEnabled) {
+      showToast("视频嗅探已开启");
+      await scan();
+    } else {
+      items = [];
+      setState("disabled");
+      showToast("视频嗅探已暂停");
+    }
+  } catch (error) {
+    elements.powerToggle.checked = extensionEnabled;
+    showToast(error.message);
+  } finally {
+    elements.powerToggle.disabled = false;
+    elements.refresh.disabled = !extensionEnabled;
+  }
+});
 document.querySelector("#filters").addEventListener("click", (event) => {
   const button = event.target.closest(".filter");
   if (!button) return;
@@ -416,4 +461,5 @@ elements.downloadSelected.addEventListener("click", async () => {
   updateDownloadButton();
 });
 
+elements.powerToggle.disabled = true;
 scan();

@@ -1,6 +1,22 @@
 const mediaByTab = new Map();
 const MAX_ITEMS_PER_TAB = 200;
 const BILIBILI_HEADER_RULE_ID = 1700;
+const EXTENSION_ENABLED_KEY = "extensionEnabled";
+const ACTION_ICONS = {
+  enabled: {
+    16: "icons/icon16.png",
+    32: "icons/icon32.png",
+    48: "icons/icon48.png",
+    128: "icons/icon128.png"
+  },
+  disabled: {
+    16: "icons/icon-off16.png",
+    32: "icons/icon-off32.png",
+    48: "icons/icon-off48.png",
+    128: "icons/icon-off128.png"
+  }
+};
+let extensionEnabled = false;
 
 const MEDIA_EXTENSIONS = /\.(mp4|webm|mov|m4v|avi|mkv|flv|ogv|mp3|m4a|aac|wav|flac|ogg|opus|m3u8|mpd)(?:$|[?#])/i;
 const MEDIA_CONTENT_TYPES = [
@@ -10,6 +26,49 @@ const MEDIA_CONTENT_TYPES = [
   "application/x-mpegurl",
   "application/dash+xml"
 ];
+
+async function updateActionAppearance() {
+  await chrome.action.setIcon({ path: extensionEnabled ? ACTION_ICONS.enabled : ACTION_ICONS.disabled });
+  await chrome.action.setTitle({ title: extensionEnabled ? "识别当前页面视频" : "视频嗅探下载器（已暂停）" });
+  if (!extensionEnabled) await chrome.action.setBadgeText({ text: "" });
+}
+
+async function clearDetectedMedia() {
+  mediaByTab.clear();
+  const stored = await chrome.storage.session.get(null);
+  const mediaKeys = Object.keys(stored).filter((key) => key.startsWith("media_tab_"));
+  if (mediaKeys.length) await chrome.storage.session.remove(mediaKeys);
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.filter((tab) => tab.id >= 0).map((tab) => chrome.action.setBadgeText({ tabId: tab.id, text: "" }).catch(() => {})));
+}
+
+async function broadcastExtensionState() {
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.filter((tab) => tab.id >= 0).map((tab) =>
+    chrome.tabs.sendMessage(tab.id, { type: "SET_EXTENSION_ENABLED", enabled: extensionEnabled }).catch(() => {})
+  ));
+}
+
+async function initializeExtensionState() {
+  const stored = await chrome.storage.local.get(EXTENSION_ENABLED_KEY);
+  extensionEnabled = stored[EXTENSION_ENABLED_KEY] !== false;
+  await updateActionAppearance();
+  if (!extensionEnabled) await clearDetectedMedia();
+}
+
+const extensionStateReady = initializeExtensionState().catch(() => {
+  extensionEnabled = true;
+});
+
+async function setExtensionEnabled(enabled) {
+  await extensionStateReady;
+  extensionEnabled = Boolean(enabled);
+  await chrome.storage.local.set({ [EXTENSION_ENABLED_KEY]: extensionEnabled });
+  if (!extensionEnabled) await clearDetectedMedia();
+  await updateActionAppearance();
+  await broadcastExtensionState();
+  return extensionEnabled;
+}
 
 async function ensureBilibiliRequestHeaders() {
   await chrome.declarativeNetRequest.updateDynamicRules({
@@ -113,7 +172,7 @@ function normalizeItem(item) {
 }
 
 function mergeItems(tabId, items) {
-  if (tabId < 0) return [];
+  if (!extensionEnabled || tabId < 0) return [];
   const current = mediaByTab.get(tabId) || new Map();
   for (const rawItem of items || []) {
     const item = normalizeItem(rawItem);
@@ -148,7 +207,7 @@ function mergeItems(tabId, items) {
 
 chrome.webRequest.onHeadersReceived.addListener(
   (details) => {
-    if (details.tabId < 0 || !isMediaResponse(details)) return;
+    if (!extensionEnabled || details.tabId < 0 || !isMediaResponse(details)) return;
     const contentType = getHeader(details, "content-type");
     const contentLength = Number(getHeader(details, "content-length")) || 0;
     mergeItems(details.tabId, [{
@@ -178,28 +237,47 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "PAGE_MEDIA" && sender.tab?.id >= 0) {
-    sendResponse({ items: mergeItems(sender.tab.id, message.items) });
+    sendResponse({ items: extensionEnabled ? mergeItems(sender.tab.id, message.items) : [], enabled: extensionEnabled });
     return;
+  }
+
+  if (message?.type === "GET_EXTENSION_STATE") {
+    extensionStateReady
+      .then(() => sendResponse({ enabled: extensionEnabled }))
+      .catch(() => sendResponse({ enabled: true }));
+    return true;
+  }
+
+  if (message?.type === "SET_EXTENSION_STATE") {
+    setExtensionEnabled(message.enabled)
+      .then((enabled) => sendResponse({ ok: true, enabled }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
 
   if (message?.type === "GET_MEDIA") {
     const tabId = Number(message.tabId);
-    const inMemory = mediaByTab.get(tabId);
-    if (inMemory) {
-      sendResponse({ items: [...inMemory.values()] });
-      return;
-    }
-    chrome.storage.session.get(`media_tab_${tabId}`)
-      .then((stored) => {
-        const restored = stored[`media_tab_${tabId}`] || [];
-        sendResponse({ items: mergeItems(tabId, restored) });
+    extensionStateReady
+      .then(() => {
+        if (!extensionEnabled) return { items: [], enabled: false };
+        const inMemory = mediaByTab.get(tabId);
+        if (inMemory) return { items: [...inMemory.values()], enabled: true };
+        return chrome.storage.session.get(`media_tab_${tabId}`).then((stored) => {
+          const restored = stored[`media_tab_${tabId}`] || [];
+          return { items: mergeItems(tabId, restored), enabled: true };
+        });
       })
-      .catch(() => sendResponse({ items: [] }));
+      .then(sendResponse)
+      .catch(() => sendResponse({ items: [], enabled: extensionEnabled }));
     return true;
   }
 
   if (message?.type === "DOWNLOAD_MEDIA") {
-    downloadMedia(message.item, message.mode, message.audioFormat, message.videoFormat)
+    extensionStateReady
+      .then(() => {
+        if (!extensionEnabled) throw new Error("扩展当前已暂停，请先打开右上角开关");
+        return downloadMedia(message.item, message.mode, message.audioFormat, message.videoFormat);
+      })
       .then((downloadId) => sendResponse({ ok: true, downloadId }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;

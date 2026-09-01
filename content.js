@@ -2,9 +2,11 @@
   const VIDEO_PATTERN = /\.(mp4|webm|mov|m4v|avi|mkv|flv|ogv|mp3|m4a|aac|wav|flac|ogg|opus|m3u8|mpd)(?:$|[?#])/i;
   const BILIBILI_RESPONSE_TYPE = "VIDEO_DOWNLOADER_BILIBILI_DASH";
   const BILIBILI_REQUEST_TYPE = "VIDEO_DOWNLOADER_REQUEST_BILIBILI_DASH";
+  const BILIBILI_STATE_TYPE = "VIDEO_DOWNLOADER_BILIBILI_STATE";
   let reportTimer;
   let mediaObserver;
   let contextValid = true;
+  let extensionEnabled = true;
   let bilibiliDashItem = null;
 
   function stopAfterContextInvalidation() {
@@ -14,19 +16,46 @@
   }
 
   function sendMessageSafely(message) {
-    if (!contextValid) return;
+    if (!contextValid) return Promise.resolve(null);
     try {
       const pending = chrome.runtime.sendMessage(message);
-      pending?.catch((error) => {
+      if (!pending?.catch) return Promise.resolve(null);
+      return pending.catch((error) => {
         if (/Extension context invalidated/i.test(String(error?.message || error))) {
           stopAfterContextInvalidation();
         }
+        return null;
       });
     } catch (error) {
       if (/Extension context invalidated/i.test(String(error?.message || error))) {
         stopAfterContextInvalidation();
       }
+      return Promise.resolve(null);
     }
+  }
+
+  function observeMedia() {
+    mediaObserver.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["src", "href"]
+    });
+  }
+
+  function setExtensionEnabled(enabled) {
+    if (!contextValid) return;
+    extensionEnabled = enabled !== false;
+    clearTimeout(reportTimer);
+    window.postMessage({ type: BILIBILI_STATE_TYPE, enabled: extensionEnabled }, location.origin);
+    if (!extensionEnabled) {
+      bilibiliDashItem = null;
+      mediaObserver.disconnect();
+      return;
+    }
+    observeMedia();
+    requestBilibiliDash();
+    reportMedia();
   }
 
   function absoluteUrl(value) {
@@ -101,13 +130,13 @@
   }
 
   function requestBilibiliDash() {
-    if (!contextValid) return;
+    if (!contextValid || !extensionEnabled) return;
     if (!/(^|\.)bilibili\.com$/i.test(location.hostname)) return;
     window.postMessage({ type: BILIBILI_REQUEST_TYPE }, location.origin);
   }
 
   function reportMedia() {
-    if (!contextValid) return;
+    if (!contextValid || !extensionEnabled) return;
     clearTimeout(reportTimer);
     reportTimer = setTimeout(() => {
       sendMessageSafely({ type: "PAGE_MEDIA", items: collectMedia() });
@@ -115,7 +144,16 @@
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "SET_EXTENSION_ENABLED") {
+      setExtensionEnabled(message.enabled);
+      sendResponse({ ok: true });
+      return;
+    }
     if (message?.type === "SCAN_PAGE") {
+      if (!extensionEnabled) {
+        sendResponse({ items: [], enabled: false });
+        return;
+      }
       requestBilibiliDash();
       const items = collectMedia();
       sendMessageSafely({ type: "PAGE_MEDIA", items });
@@ -125,6 +163,7 @@
 
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== location.origin || event.data?.type !== BILIBILI_RESPONSE_TYPE) return;
+    if (!extensionEnabled) return;
     const item = event.data.item;
     if (!item || item.kind !== "bilibili-dash" || !Array.isArray(item.videoStreams) || !item.videoStreams.length) return;
     bilibiliDashItem = item;
@@ -132,15 +171,9 @@
   });
 
   mediaObserver = new MutationObserver(reportMedia);
-  mediaObserver.observe(document.documentElement, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ["src", "href"]
-  });
 
   window.addEventListener("load", reportMedia, { once: true });
   document.addEventListener("loadedmetadata", reportMedia, true);
-  requestBilibiliDash();
-  reportMedia();
+  sendMessageSafely({ type: "GET_EXTENSION_STATE" })
+    .then((response) => setExtensionEnabled(response?.enabled !== false));
 })();

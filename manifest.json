@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "视频嗅探下载器",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "minimum_chrome_version": "102",
   "description": "识别网页视频与音频，支持直链、HLS、Bilibili DASH 合并及本地格式转换。",
   "permissions": [
@@ -19,11 +19,23 @@
   "background": {
     "service_worker": "background.js"
   },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'"
   },
   "action": {
     "default_title": "识别当前页面视频",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
     "default_popup": "popup.html"
   },
   "content_scripts": [

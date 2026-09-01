@@ -8,11 +8,21 @@
   </head>
   <body>
     <header>
-      <div>
-        <p class="eyebrow">VIDEO FINDER</p>
-        <h1>当前页面的视频</h1>
+      <div class="title-block">
+        <img class="popup-logo" src="icons/icon32.png" alt="">
+        <div>
+          <p class="eyebrow">VIDEO FINDER</p>
+          <h1>当前页面的视频</h1>
+        </div>
       </div>
-      <button id="refreshButton" class="icon-button" title="重新扫描" aria-label="重新扫描">↻</button>
+      <div class="header-actions">
+        <label class="power-control" title="开启或暂停视频嗅探">
+          <span class="power-label">工作</span>
+          <input id="extensionEnabled" type="checkbox" checked aria-label="开启视频嗅探">
+          <span class="power-track" aria-hidden="true"><span class="power-thumb"></span></span>
+        </label>
+        <button id="refreshButton" class="icon-button" title="重新扫描" aria-label="重新扫描">↻</button>
+      </div>
     </header>
 
     <nav id="filters" class="filters hidden" aria-label="资源筛选">
@@ -24,6 +34,11 @@
 
     <main>
       <div id="loading" class="state">正在扫描页面…</div>
+      <div id="disabled" class="state hidden">
+        <div class="paused-icon">Ⅱ</div>
+        <strong>视频嗅探已暂停</strong>
+        <span>打开右上角“工作”开关即可恢复页面扫描和网络资源识别。</span>
+      </div>
       <div id="empty" class="state hidden">
         <div class="empty-icon">▶</div>
         <strong>暂未发现视频</strong>
