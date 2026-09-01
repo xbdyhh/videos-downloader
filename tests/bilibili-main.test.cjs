@@ -149,6 +149,42 @@ assert.equal(mergedResponse.items[0].kind, "bilibili-dash");
 assert.equal(mergedResponse.items[0].selectedVideo.height, 1080);
 assert.equal(mergedResponse.items[0].selectedAudio.codecs, "fLaC");
 
+let observerDisconnected = false;
+class MockMutationObserver {
+  constructor(callback) { this.callback = callback; }
+  observe() {}
+  disconnect() { observerDisconnected = true; }
+}
+const invalidatedContentContext = {
+  chrome: {
+    runtime: {
+      sendMessage() { throw new Error("Extension context invalidated."); },
+      onMessage: { addListener() {} }
+    }
+  },
+  window: {
+    addEventListener() {},
+    postMessage() {}
+  },
+  document: {
+    baseURI: "https://example.com/",
+    title: "测试页面",
+    documentElement: {},
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  },
+  location: { hostname: "example.com", origin: "https://example.com" },
+  performance: { getEntriesByType() { return []; } },
+  MutationObserver: MockMutationObserver,
+  URL,
+  clearTimeout() {},
+  setTimeout(callback) { callback(); return 1; }
+};
+invalidatedContentContext.window.window = invalidatedContentContext.window;
+const contentSource = fs.readFileSync(path.join(root, "content.js"), "utf8");
+assert.doesNotThrow(() => vm.runInNewContext(contentSource, invalidatedContentContext, { filename: "content.js" }));
+assert.equal(observerDisconnected, true, "invalidated extension context should stop the media observer");
+
 for (const filename of ["background.js", "content.js", "popup.js", "hls-downloader.js"]) {
   const script = fs.readFileSync(path.join(root, filename), "utf8");
   assert.doesNotThrow(() => new Function(script), `${filename} should parse`);

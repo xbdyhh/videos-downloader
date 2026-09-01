@@ -92,3 +92,7 @@
 - `THIRD_PARTY_NOTICES.md`：第三方组件版本、来源与许可证说明。
 - `content.js`：页面元素、动态节点和 Performance 资源扫描；
 - `popup.html` / `popup.css` / `popup.js`：扩展弹窗界面。
+
+## 开源许可
+
+本项目采用 [MIT License](LICENSE)。项目内打包的 FFmpeg、mux.js 等第三方组件仍分别遵循其原始许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

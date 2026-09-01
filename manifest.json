@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "视频嗅探下载器",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "minimum_chrome_version": "102",
   "description": "识别网页视频与音频，支持直链、HLS、Bilibili DASH 合并及本地格式转换。",
   "permissions": [

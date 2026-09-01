@@ -3,7 +3,31 @@
   const BILIBILI_RESPONSE_TYPE = "VIDEO_DOWNLOADER_BILIBILI_DASH";
   const BILIBILI_REQUEST_TYPE = "VIDEO_DOWNLOADER_REQUEST_BILIBILI_DASH";
   let reportTimer;
+  let mediaObserver;
+  let contextValid = true;
   let bilibiliDashItem = null;
+
+  function stopAfterContextInvalidation() {
+    contextValid = false;
+    clearTimeout(reportTimer);
+    mediaObserver?.disconnect();
+  }
+
+  function sendMessageSafely(message) {
+    if (!contextValid) return;
+    try {
+      const pending = chrome.runtime.sendMessage(message);
+      pending?.catch((error) => {
+        if (/Extension context invalidated/i.test(String(error?.message || error))) {
+          stopAfterContextInvalidation();
+        }
+      });
+    } catch (error) {
+      if (/Extension context invalidated/i.test(String(error?.message || error))) {
+        stopAfterContextInvalidation();
+      }
+    }
+  }
 
   function absoluteUrl(value) {
     if (!value) return "";
@@ -77,14 +101,16 @@
   }
 
   function requestBilibiliDash() {
+    if (!contextValid) return;
     if (!/(^|\.)bilibili\.com$/i.test(location.hostname)) return;
     window.postMessage({ type: BILIBILI_REQUEST_TYPE }, location.origin);
   }
 
   function reportMedia() {
+    if (!contextValid) return;
     clearTimeout(reportTimer);
     reportTimer = setTimeout(() => {
-      chrome.runtime.sendMessage({ type: "PAGE_MEDIA", items: collectMedia() }).catch(() => {});
+      sendMessageSafely({ type: "PAGE_MEDIA", items: collectMedia() });
     }, 250);
   }
 
@@ -92,7 +118,7 @@
     if (message?.type === "SCAN_PAGE") {
       requestBilibiliDash();
       const items = collectMedia();
-      chrome.runtime.sendMessage({ type: "PAGE_MEDIA", items }).catch(() => {});
+      sendMessageSafely({ type: "PAGE_MEDIA", items });
       sendResponse({ items });
     }
   });
@@ -102,10 +128,11 @@
     const item = event.data.item;
     if (!item || item.kind !== "bilibili-dash" || !Array.isArray(item.videoStreams) || !item.videoStreams.length) return;
     bilibiliDashItem = item;
-    chrome.runtime.sendMessage({ type: "PAGE_MEDIA", items: [item] }).catch(() => {});
+    sendMessageSafely({ type: "PAGE_MEDIA", items: [item] });
   });
 
-  new MutationObserver(reportMedia).observe(document.documentElement, {
+  mediaObserver = new MutationObserver(reportMedia);
+  mediaObserver.observe(document.documentElement, {
     subtree: true,
     childList: true,
     attributes: true,
