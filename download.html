@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频下载中心</title><link rel="stylesheet" href="download.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar"><div class="brand-mark">VD</div><div><p class="eyebrow">LOCAL MEDIA PROCESSOR</p><h1>视频下载中心</h1></div><span class="privacy-pill">仅在本机处理</span></header>
+      <section class="download-card">
+        <div class="file-heading"><div class="file-icon">▶</div><div class="file-copy"><h2 id="videoTitle">正在读取下载任务…</h2><p id="videoUrl">请保持此页面打开</p></div><span id="stateBadge" class="state-badge">准备中</span></div>
+        <div class="progress-track" aria-label="下载进度"><div id="progressBar" class="progress-bar"></div></div>
+        <div class="progress-row"><strong id="progressText">0%</strong><span id="segmentText">等待播放清单</span></div>
+        <div class="stats"><div><span>已下载</span><strong id="bytesText">0 B</strong></div><div><span>平均速度</span><strong id="speedText">0 B/s</strong></div><div><span>输出格式</span><strong id="formatText">检测中</strong></div><div><span>任务类型</span><strong id="streamText">检测中</strong></div></div>
+        <div id="messageBox" class="message-box">正在读取媒体任务…</div>
+        <div class="actions"><button id="pauseButton" class="secondary" disabled>暂停</button><button id="finishButton" class="primary" disabled>结束并保存</button><button id="partialButton" class="secondary" disabled>保存已下载部分</button><button id="cancelButton" class="danger" disabled>取消</button></div>
+      </section>
+      <aside class="tip-card"><strong>下载提示</strong><p>HLS 会合并全部分片；Bilibili DASH 会分别下载所选视频轨和音频轨，再在本机合并。音频任务会按你选择的 MP3、FLAC 或自动模式处理。</p></aside>
+    </main>
+    <script src="vendor/mux-mp4.min.js"></script>
+    <script src="vendor/ffmpeg/ffmpeg.js"></script>
+    <script src="hls-downloader.js"></script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频嗅探下载器</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">VIDEO FINDER</p>
+        <h1>当前页面的视频</h1>
+      </div>
+      <button id="refreshButton" class="icon-button" title="重新扫描" aria-label="重新扫描">↻</button>
+    </header>
+
+    <nav id="filters" class="filters hidden" aria-label="资源筛选">
+      <button class="filter active" data-filter="all">全部 <span id="allCount">0</span></button>
+      <button class="filter" data-filter="direct">文件 <span id="directCount">0</span></button>
+      <button class="filter" data-filter="hls">HLS <span id="hlsCount">0</span></button>
+      <button class="filter" data-filter="dash">DASH <span id="dashCount">0</span></button>
+    </nav>
+
+    <main>
+      <div id="loading" class="state">正在扫描页面…</div>
+      <div id="empty" class="state hidden">
+        <div class="empty-icon">▶</div>
+        <strong>暂未发现视频</strong>
+        <span>先播放一下页面中的视频，再点击右上角刷新。扩展图标上的数字表示已发现资源数。</span>
+      </div>
+      <section id="mediaList" class="media-list hidden"></section>
+    </main>
+
+    <footer id="footer" class="hidden">
+      <label class="select-all"><input id="selectAll" type="checkbox"> 全选可下载资源</label>
+      <button id="downloadSelected" class="primary-button">下载所选</button>
+    </footer>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "视频嗅探下载器",
+  "version": "1.7.0",
+  "minimum_chrome_version": "102",
+  "description": "识别网页视频与音频，支持直链、HLS、Bilibili DASH 合并及本地格式转换。",
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "declarativeNetRequestWithHostAccess",
+    "downloads",
+    "storage",
+    "tabs",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'"
+  },
+  "action": {
+    "default_title": "识别当前页面视频",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.bilibili.com/*"],
+      "js": ["bilibili-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}
