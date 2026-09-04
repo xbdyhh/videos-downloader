@@ -21,6 +21,12 @@
           <input id="extensionEnabled" type="checkbox" checked aria-label="开启视频嗅探">
           <span class="power-track" aria-hidden="true"><span class="power-thumb"></span></span>
         </label>
+        <button id="settingsButton" class="icon-button settings-button" title="默认下载格式" aria-label="设置默认下载格式" aria-haspopup="dialog" aria-controls="settingsDialog" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="m9.5 3-.7 2.1-2 .9-2.1-.5-2 3.5 1.5 1.6v2.8L2.7 15l2 3.5 2.1-.5 2 .9.7 2.1h5l.7-2.1 2-.9 2.1.5 2-3.5-1.5-1.6v-2.8L21.3 9l-2-3.5-2.1.5-2-.9L14.5 3Z" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
         <button id="refreshButton" class="icon-button" title="重新扫描" aria-label="重新扫描">↻</button>
       </div>
     </header>
@@ -52,6 +58,34 @@
       <button id="downloadSelected" class="primary-button">下载所选</button>
     </footer>
 
+    <dialog id="settingsDialog" aria-labelledby="settingsTitle" aria-describedby="settingsDescription">
+      <form id="settingsForm">
+        <h2 id="settingsTitle">默认下载格式</h2>
+        <p id="settingsDescription">保存后自动用于资源列表和批量下载，单个资源仍可临时选择其他格式。</p>
+        <label class="settings-field" for="defaultVideoFormat">
+          <span>视频格式</span>
+          <select id="defaultVideoFormat" name="videoFormat">
+            <option value="auto">自动</option>
+            <option value="mp4">MP4</option>
+            <option value="ts">TS</option>
+          </select>
+        </label>
+        <label class="settings-field" for="defaultAudioFormat">
+          <span>音频格式</span>
+          <select id="defaultAudioFormat" name="audioFormat">
+            <option value="auto">自动</option>
+            <option value="mp3">MP3</option>
+            <option value="flac">FLAC</option>
+          </select>
+        </label>
+        <p class="settings-note">设置仅保存在本机，不改变正在进行的下载。转为 FLAC 不会提升有损源音质。</p>
+        <p id="settingsError" class="settings-error hidden" role="alert"></p>
+        <div class="settings-actions">
+          <button id="cancelSettings" class="settings-cancel" type="button">取消</button>
+          <button id="saveSettings" class="primary-button" type="submit">保存设置</button>
+        </div>
+      </form>
+    </dialog>
     <div id="toast" class="toast hidden" role="status"></div>
     <script src="popup.js"></script>
   </body>

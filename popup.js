@@ -6,6 +6,14 @@ const elements = {
   footer: document.querySelector("#footer"),
   refresh: document.querySelector("#refreshButton"),
   powerToggle: document.querySelector("#extensionEnabled"),
+  settingsButton: document.querySelector("#settingsButton"),
+  settingsDialog: document.querySelector("#settingsDialog"),
+  settingsForm: document.querySelector("#settingsForm"),
+  defaultVideoFormat: document.querySelector("#defaultVideoFormat"),
+  defaultAudioFormat: document.querySelector("#defaultAudioFormat"),
+  saveSettings: document.querySelector("#saveSettings"),
+  cancelSettings: document.querySelector("#cancelSettings"),
+  settingsError: document.querySelector("#settingsError"),
   selectAll: document.querySelector("#selectAll"),
   downloadSelected: document.querySelector("#downloadSelected"),
   toast: document.querySelector("#toast")
@@ -16,6 +24,76 @@ let items = [];
 let toastTimer;
 let activeFilter = "all";
 let extensionEnabled = true;
+const DEFAULT_FORMATS_KEY = "downloadDefaults";
+let defaultFormats = { videoFormat: "auto", audioFormat: "auto" };
+let settingsSaving = false;
+
+function normalizeFormats(value) {
+  return {
+    videoFormat: ["auto", "mp4", "ts"].includes(value?.videoFormat) ? value.videoFormat : "auto",
+    audioFormat: ["auto", "mp3", "flac"].includes(value?.audioFormat) ? value.audioFormat : "auto"
+  };
+}
+
+function resolveFormats(item, audioFormat, videoFormat) {
+  // Explicit "auto" is a real choice, not a request to fall back to the saved default.
+  return normalizeFormats({
+    videoFormat: videoFormat ?? item.videoFormat ?? defaultFormats.videoFormat,
+    audioFormat: audioFormat ?? item.audioFormat ?? defaultFormats.audioFormat
+  });
+}
+
+function refreshFormatControls() {
+  // Update just the format controls to preserve checkboxes, quality and track selections.
+  document.querySelectorAll(".video-format-select").forEach((select) => {
+    const item = items[Number(select.dataset.index)];
+    if (item) select.value = resolveFormats(item).videoFormat;
+  });
+  document.querySelectorAll(".audio-format-select").forEach((select) => {
+    const item = items[Number(select.dataset.index)];
+    if (item) select.value = resolveFormats(item).audioFormat;
+  });
+}
+
+function openSettings() {
+  elements.defaultVideoFormat.value = defaultFormats.videoFormat;
+  elements.defaultAudioFormat.value = defaultFormats.audioFormat;
+  elements.settingsError.classList.add("hidden");
+  document.body.classList.add("settings-open");
+  elements.settingsDialog.showModal();
+  elements.defaultVideoFormat.focus();
+}
+
+async function saveDefaultFormats(event) {
+  event.preventDefault();
+  if (settingsSaving) return;
+  settingsSaving = true;
+  elements.saveSettings.disabled = true;
+  elements.cancelSettings.disabled = true;
+  elements.defaultVideoFormat.disabled = true;
+  elements.defaultAudioFormat.disabled = true;
+  elements.settingsError.classList.add("hidden");
+  const next = normalizeFormats({
+    videoFormat: elements.defaultVideoFormat.value,
+    audioFormat: elements.defaultAudioFormat.value
+  });
+  try {
+    await chrome.storage.local.set({ [DEFAULT_FORMATS_KEY]: next });
+    defaultFormats = next;
+    refreshFormatControls();
+    elements.settingsDialog.close();
+    showToast("默认格式已保存，单个资源的临时选择保持不变");
+  } catch (_) {
+    elements.settingsError.textContent = "保存失败，原设置未改变。请重试。";
+    elements.settingsError.classList.remove("hidden");
+  } finally {
+    settingsSaving = false;
+    elements.saveSettings.disabled = false;
+    elements.cancelSettings.disabled = false;
+    elements.defaultVideoFormat.disabled = false;
+    elements.defaultAudioFormat.disabled = false;
+  }
+}
 
 function isDownloadable(item) {
   if (item.kind === "bilibili-dash") return !item.drm && Boolean(item.videoStreams?.length);
@@ -257,6 +335,7 @@ function render() {
     button.disabled = !downloadable;
     const videoFormat = document.createElement("select");
     videoFormat.className = "video-format-select";
+    videoFormat.dataset.index = index;
     videoFormat.title = "选择视频保存格式";
     [["auto", "视频：自动"], ["mp4", "视频：MP4"], ["ts", "视频：TS"]].forEach(([value, label]) => {
       const option = document.createElement("option");
@@ -264,12 +343,13 @@ function render() {
       option.textContent = label;
       videoFormat.append(option);
     });
+    videoFormat.value = resolveFormats(item).videoFormat;
     videoFormat.disabled = !downloadable;
     videoFormat.addEventListener("change", () => { item.videoFormat = videoFormat.value; });
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
-        await downloadItem(item, "video", "auto", videoFormat.value);
+        await downloadItem(item, "video", undefined, videoFormat.value);
         const label = videoFormat.value === "auto" ? "自动选择格式" : `保存为 ${videoFormat.value.toUpperCase()}`;
         showToast(item.kind === "hls" || item.kind === "bilibili-dash" || videoFormat.value !== "auto" ? `已打开下载中心：${label}` : "已交给 Chrome 下载");
       } catch (error) {
@@ -296,6 +376,7 @@ function render() {
     audio.disabled = !audioDownloadable;
     const audioFormat = document.createElement("select");
     audioFormat.className = "audio-format-select";
+    audioFormat.dataset.index = index;
     audioFormat.title = "选择音频保存格式";
     [["auto", "音频：自动"], ["mp3", "音频：MP3"], ["flac", "音频：FLAC"]].forEach(([value, label]) => {
       const option = document.createElement("option");
@@ -303,6 +384,8 @@ function render() {
       option.textContent = label;
       audioFormat.append(option);
     });
+    audioFormat.value = resolveFormats(item).audioFormat;
+    audioFormat.addEventListener("change", () => { item.audioFormat = audioFormat.value; });
     audioFormat.disabled = !audioDownloadable;
     audio.addEventListener("click", async () => {
       audio.disabled = true;
@@ -375,7 +458,8 @@ async function scan() {
   }
 }
 
-async function downloadItem(item, mode = "video", audioFormat = "auto", videoFormat = "auto") {
+async function downloadItem(item, mode = "video", audioFormat, videoFormat) {
+  const formats = resolveFormats(item, audioFormat, videoFormat);
   if (item.kind === "bilibili-dash") {
     const selectedVideo = item.selectedVideo || item.videoStreams?.[0];
     const selectedAudio = item.selectedAudio || item.audioStreams?.[0] || null;
@@ -392,18 +476,27 @@ async function downloadItem(item, mode = "video", audioFormat = "auto", videoFor
       selectedQuality: selectedVideo.label || item.selectedQuality || "",
       selectedAudioLabel: selectedAudio?.label || ""
     };
-    const response = await chrome.runtime.sendMessage({ type: "DOWNLOAD_MEDIA", item: payload, mode, audioFormat, videoFormat });
+    const response = await chrome.runtime.sendMessage({ type: "DOWNLOAD_MEDIA", item: payload, mode, ...formats });
     if (!response?.ok) throw new Error(response?.error || "Bilibili 下载启动失败");
     return;
   }
   const selectedUrl = mode === "audio" ? item.audioUrl || item.downloadUrl : item.downloadUrl;
   const payload = selectedUrl ? { ...item, url: selectedUrl } : item;
-  const selectedVideoFormat = videoFormat === "auto" ? item.videoFormat || "auto" : videoFormat;
-  const response = await chrome.runtime.sendMessage({ type: "DOWNLOAD_MEDIA", item: payload, mode, audioFormat, videoFormat: selectedVideoFormat });
+  const response = await chrome.runtime.sendMessage({ type: "DOWNLOAD_MEDIA", item: payload, mode, ...formats });
   if (!response?.ok) throw new Error(response?.error || "下载启动失败");
 }
 
 elements.refresh.addEventListener("click", scan);
+elements.settingsButton.addEventListener("click", openSettings);
+elements.settingsForm.addEventListener("submit", saveDefaultFormats);
+elements.cancelSettings.addEventListener("click", () => elements.settingsDialog.close());
+elements.settingsDialog.addEventListener("cancel", (event) => {
+  if (settingsSaving) event.preventDefault();
+});
+elements.settingsDialog.addEventListener("close", () => {
+  document.body.classList.remove("settings-open");
+  elements.settingsButton.focus();
+});
 elements.powerToggle.addEventListener("change", async () => {
   const requestedState = elements.powerToggle.checked;
   elements.powerToggle.disabled = true;
@@ -461,5 +554,17 @@ elements.downloadSelected.addEventListener("click", async () => {
   updateDownloadButton();
 });
 
-elements.powerToggle.disabled = true;
-scan();
+async function initPopup() {
+  elements.powerToggle.disabled = true;
+  elements.settingsButton.disabled = true;
+  try {
+    const stored = await chrome.storage.local.get(DEFAULT_FORMATS_KEY);
+    defaultFormats = normalizeFormats(stored[DEFAULT_FORMATS_KEY]);
+  } catch (_) {
+    showToast("默认格式读取失败，本次暂用自动模式");
+  }
+  elements.settingsButton.disabled = false;
+  await scan();
+}
+
+initPopup();

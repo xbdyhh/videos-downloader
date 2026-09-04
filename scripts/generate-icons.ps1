@@ -23,7 +23,7 @@ function Write-ExtensionIcon([int]$size, [bool]$enabled) {
   $graphics.Clear([System.Drawing.Color]::Transparent)
 
   $margin = [Math]::Max(1, $size * 0.03125)
-  $background = if ($enabled) { [System.Drawing.ColorTranslator]::FromHtml("#ff5a36") } else { [System.Drawing.ColorTranslator]::FromHtml("#aeb7b3") }
+  $background = if ($enabled) { [System.Drawing.ColorTranslator]::FromHtml("#f45b93") } else { [System.Drawing.ColorTranslator]::FromHtml("#aeb7b3") }
   $foreground = if ($enabled) { [System.Drawing.Color]::White } else { [System.Drawing.ColorTranslator]::FromHtml("#f3f5f4") }
   $playColor = if ($enabled) { $background } else { [System.Drawing.ColorTranslator]::FromHtml("#7b8781") }
 

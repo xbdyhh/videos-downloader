@@ -1,10 +1,10 @@
 {
   "name": "video-sniffer-downloader",
-  "version": "1.8.0",
+  "version": "1.9.1",
   "private": true,
   "description": "Chrome extension for detecting and downloading webpage video resources.",
   "scripts": {
-    "test": "node tests/bilibili-main.test.cjs"
+    "test": "node tests/bilibili-main.test.cjs && node tests/popup-settings.test.cjs && node tests/background-tab-lifecycle.test.cjs"
   },
   "dependencies": {
     "@ffmpeg/core": "0.12.10",

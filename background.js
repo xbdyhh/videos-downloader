@@ -33,13 +33,26 @@ async function updateActionAppearance() {
   if (!extensionEnabled) await chrome.action.setBadgeText({ text: "" });
 }
 
+async function updateTabAction(tabId, method, details) {
+  if (!Number.isInteger(tabId) || tabId < 0) return;
+  try {
+    await chrome.action[method]({ ...details, tabId });
+  } catch (error) {
+    // A tab can close after an event fires, even if tabs.get() just found it.
+    // Its badge is no longer needed; do not turn normal closure into a rejection.
+    if (!/^No tab with id: \d+\.?$/i.test(String(error?.message || error))) {
+      console.warn(`无法更新标签页角标 (${method}, tab ${tabId})`, error);
+    }
+  }
+}
+
 async function clearDetectedMedia() {
   mediaByTab.clear();
   const stored = await chrome.storage.session.get(null);
   const mediaKeys = Object.keys(stored).filter((key) => key.startsWith("media_tab_"));
   if (mediaKeys.length) await chrome.storage.session.remove(mediaKeys);
   const tabs = await chrome.tabs.query({});
-  await Promise.all(tabs.filter((tab) => tab.id >= 0).map((tab) => chrome.action.setBadgeText({ tabId: tab.id, text: "" }).catch(() => {})));
+  await Promise.all(tabs.map((tab) => updateTabAction(tab.id, "setBadgeText", { text: "" })));
 }
 
 async function broadcastExtensionState() {
@@ -172,7 +185,7 @@ function normalizeItem(item) {
 }
 
 function mergeItems(tabId, items) {
-  if (!extensionEnabled || tabId < 0) return [];
+  if (!extensionEnabled || !Number.isInteger(tabId) || tabId < 0) return [];
   const current = mediaByTab.get(tabId) || new Map();
   for (const rawItem of items || []) {
     const item = normalizeItem(rawItem);
@@ -200,8 +213,8 @@ function mergeItems(tabId, items) {
   }
   mediaByTab.set(tabId, current);
   chrome.storage.session.set({ [`media_tab_${tabId}`]: [...current.values()] }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ tabId, color: "#18855d" });
-  chrome.action.setBadgeText({ tabId, text: current.size ? String(Math.min(current.size, 99)) : "" });
+  void updateTabAction(tabId, "setBadgeBackgroundColor", { color: "#18855d" });
+  void updateTabAction(tabId, "setBadgeText", { text: current.size ? String(Math.min(current.size, 99)) : "" });
   return [...current.values()];
 }
 
@@ -231,7 +244,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
     mediaByTab.delete(tabId);
     chrome.storage.session.remove(`media_tab_${tabId}`).catch(() => {});
-    chrome.action.setBadgeText({ tabId, text: "" });
+    void updateTabAction(tabId, "setBadgeText", { text: "" });
   }
 });
 
